@@ -79,7 +79,6 @@ def scan_host(hostname, port=443, timeout=5, context=None):
 
     names = get_x509_domains(peer_cert)
     issuer = issuer_cert.fingerprint(SHA256()).hex()
-    print(issuer_cert.subject)
     return names, issuer
 
 
@@ -95,6 +94,8 @@ def main():
                 print("No intermediate cert received!")
                 print("Offending certificate:")
                 print(exc.peer_cert.decode('ascii'))
+            except Exception as exc:
+                print("Error: %s" % (str(exc),))
 
 
 if __name__ == '__main__':  # pragma: no cover
