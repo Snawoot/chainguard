@@ -22,6 +22,9 @@ def get_cert_fp(cert):
     dump_digest = fp_hash(dump).hexdigest()
     return dump_digest
 
+def x509name_to_str(name):
+    return b", ".join(b"%s=%s" % (tag, value) for tag, value in name.get_components()).decode('ascii')
+
 def print_chain(context, hostname, timeout=5):
     print('Getting certificate chain for {0}'.format(hostname))
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -31,13 +34,9 @@ def print_chain(context, hostname, timeout=5):
     sock.connect((hostname, 443))
     sock.setblocking(1)
     sock.do_handshake()
-    notafter = sock.get_peer_certificate().get_notAfter()
-    utcafter = datetime.datetime.strptime(notafter.decode('ascii'), "%Y%m%d%H%M%SZ")
-    utcnow = datetime.datetime.utcnow()
-    print(' 0 e: {0} [{1}]'.format(utcafter - utcnow, notafter))
     for (idx, cert) in enumerate(sock.get_peer_cert_chain()):
-        print(' {0} s:{1}'.format(idx, cert.get_subject()))
-        print(' {0} i:{1}'.format(' ', cert.get_issuer()))
+        print(' {0} s:{1}'.format(idx, x509name_to_str(cert.get_subject())))
+        print(' {0} i:{1}'.format(' ', x509name_to_str(cert.get_issuer())))
         print(' {0} fp(SHA256)={1}'.format(' ', get_cert_fp(cert)))
     sock.close()
 
