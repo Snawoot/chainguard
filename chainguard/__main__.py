@@ -1,93 +1,28 @@
 #!/usr/bin/env python3
 
 import sys
-import socket
-import time
-import datetime
 import argparse
 import sqlite3
 import logging
 from functools import partial
-
-from OpenSSL import SSL, crypto
-from cryptography.hazmat.primitives.hashes import SHA256
-from cryptography.hazmat.primitives import serialization
-from cryptography import x509
-from cryptography.x509.oid import ExtensionOID, NameOID
 from multiprocessing.dummy import Pool
+
+from cryptography.hazmat.primitives.hashes import Hash, SHA256
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 
 from . import utils
 from . import constants
+from .scanner import scan_host
 
 
-def make_context():
-    context = SSL.Context(method=SSL.TLSv1_2_METHOD)
-    return context
+crypto_backend = default_backend()
 
 
-def get_x509_domains(cert):
-    names = []
-
-    try:
-        alt_names = cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
-        names = alt_names.value.get_values_for_type(x509.DNSName)
-    except x509.extensions.ExtensionNotFound:
-        pass
-
-    if not names:
-        common_names = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-        if common_names:
-            common_name = common_names[0]
-            names = [common_name.value]
-    return names
-
-
-#def scan_host(hostname, port=443, timeout=5, context=None):
-#    if context is None:
-#        context = SSL.Context(method=SSL.TLSv1_2_METHOD)
-#    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#    sock = SSL.Connection(context=context, socket=sock)
-#    sock.set_tlsext_host_name(hostname.encode('ascii'))
-#    sock.settimeout(timeout)
-#    sock.connect((hostname, port))
-#    sock.setblocking(1)
-#    sock.do_handshake()
-#
-#    iter_certs = iter(sock.get_peer_cert_chain())
-#    try:
-#        peer_cert = next(iter_certs).to_cryptography()
-#    except StopIteration:
-#        raise NoCertsReceived()
-#    try:
-#        issuer_cert = next(iter_certs).to_cryptography()
-#    except StopIteration:
-#        raise NoIntermediateCertReceived(peer_cert.public_bytes(serialization.Encoding.PEM))
-#    del iter_certs
-#    sock.close()
-#    del sock
-#
-#
-#    names = get_x509_domains(peer_cert)
-#    issuer = issuer_cert.fingerprint(SHA256()).hex()
-#    return names, issuer
-#
-#
-def scan_host(hostname, port=443, timeout=5, context=None):
-    if context is None:
-        context = make_context()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock = SSL.Connection(context=context, socket=sock)
-    sock.set_tlsext_host_name(hostname.encode('ascii'))
-    sock.settimeout(timeout)
-    sock.connect((hostname, port))
-    sock.setblocking(1)
-    sock.do_handshake()
-    ts = time.time()
-
-    certs = [cert.to_cryptography() for cert in sock.get_peer_cert_chain()]
-    sock.close()
-    del sock
-    return certs, ts
+def sha256(data):
+    digest = Hash(SHA256(), backend=crypto_backend)
+    digest.update(data)
+    return digest.finalize()
 
 
 def scan_worker(attempts, timeout, domain):
@@ -152,6 +87,48 @@ def setup_db(conn):
 def process_domain(chain, ts, conn):
     logger = logging.getLogger('PROCESSING')
     logger.debug("%s %s", chain, ts)
+    if not chain:
+        logger.error("Got empty cert chain!")
+        return
+    elif len(chain) == 1:
+        logger.warn("Got certificate without issuer cert!")
+    cur = conn.cursor()
+    cur.execute("BEGIN TRANSACTION")
+
+    # Prepare and insert certificates in chain
+    fp_chain = []
+    for cert in chain:
+        cert_fp = cert.fingerprint(SHA256()).hex()
+        fp_chain.append(cert_fp)
+        cert_body = cert.public_bytes(serialization.Encoding.DER)
+        try:
+            cur.execute("INSERT INTO certificate (fp, body) VALUES (?, ?)",
+                        (cert_fp, cert_body))
+        except sqlite3.IntegrityError:
+            pass
+
+    chain_fp = sha256(','.join(fp_chain).encode('ascii')).hex()
+    for idx, cert_fp in enumerate(fp_chain):
+        try:
+            cur.execute("INSERT INTO chain_element (chain_fp, chain_position, cert_fp)"
+                        " VALUES (?, ?, ?)", (chain_fp, idx, cert_fp))
+        except sqlite3.IntegrityError:
+            pass
+
+    do_commit = False
+    for name in utils.get_x509_domains(chain[0]):
+        issuer_fp = chain[1].fingerprint(SHA256()).hex() if len(chain) > 1 else None
+        try:
+            cur.execute("INSERT INTO certification (entity_name, issuer_fp, observed_ts, chain_fp)"
+                        " VALUES (?, ?, ?, ?)", (name, issuer_fp, ts, chain_fp))
+            do_commit = True
+        except sqlite3.IntegrityError:
+            pass
+    if do_commit:
+        cur.execute("COMMIT")
+    else:
+        cur.execute("ROLLBACK")
+    cur.close()
 
 def main():
     args = parse_args()
