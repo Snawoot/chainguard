@@ -34,7 +34,7 @@ def parse_args():
                         help="logging verbosity",
                         type=utils.check_loglevel,
                         choices=constants.LogLevel,
-                        default=constants.LogLevel.info)
+                        default=constants.LogLevel.warn)
     parser.add_argument("-n", "--threads",
                         type=utils.check_positive_int,
                         default=8,

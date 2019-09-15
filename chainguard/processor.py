@@ -90,19 +90,20 @@ class ChainProcessor(object):
             except sqlite3.IntegrityError:
                 pass
 
+        names = utils.get_x509_domains(chain[0])
         do_commit = False
-        for name in utils.get_x509_domains(chain[0]):
+        for name in names:
             issuer_fp = chain[1].fingerprint(SHA256()).hex() if len(chain) > 1 else None
             try:
                 cur.execute("INSERT INTO certification (entity_name, issuer_fp, observed_ts, chain_fp)"
                             " VALUES (?, ?, ?, ?)", (name, issuer_fp, ts, chain_fp))
                 do_commit = True
-                self._logger.warning("New issuer %s detected for name %s in chain %s!",
-                                     issuer_fp, name, chain_fp)
             except sqlite3.IntegrityError:
                 pass
         if do_commit:
             cur.execute("COMMIT")
+            self._logger.warning("New issuer %s detected in chain %s! Names affected: %s",
+                                 issuer_fp, chain_fp, names)
         else:
             cur.execute("ROLLBACK")
         cur.close()
