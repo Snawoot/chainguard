@@ -66,7 +66,9 @@ class ChainProcessor(object):
             self._logger.error("Got empty cert chain!")
             return
         elif len(chain) == 1:
-            self._logger.warning("Got certificate without issuer cert!")
+            self._logger.warning("Got certificate without issuer cert! "
+                                 "Certificate subject: %s",
+                                 chain[0].subject.rfc4514_string())
         cur = self._conn.cursor()
         cur.execute("BEGIN TRANSACTION")
 
@@ -107,4 +109,3 @@ class ChainProcessor(object):
         else:
             cur.execute("ROLLBACK")
         cur.close()
-
