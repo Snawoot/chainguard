@@ -22,11 +22,14 @@ setup(name='chainguard',
       install_requires=[
           'cryptography>=1.6',
           'pyOpenSSL>=17.1.0',
+          'dateparser',
+          'python-dateutil',
       ],
       entry_points={
           'console_scripts': [
               'chainguard=chainguard.__main__:main',
               'chainguard-getchain=chainguard.getchain:main',
+              'chainguard-news=chainguard.news:main',
           ],
       },
       classifiers=[
