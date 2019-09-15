@@ -6,6 +6,7 @@ import time
 import datetime
 import argparse
 import sqlite3
+import logging
 from functools import partial
 
 from OpenSSL import SSL, crypto
@@ -19,31 +20,11 @@ from . import utils
 from . import constants
 
 
-#class ChainguardException(Exception):
-#    pass
-#
-#
-#class NoCertsReceived(ChainguardException):
-#    def __init__(self):
-#        pass
-#
-#    def __str__(self):
-#        return "No certs retrieved!"
-#
-#
-#class NoIntermediateCertReceived(ChainguardException):
-#    def __init__(self, peer_cert=None):
-#        self.peer_cert = peer_cert
-#
-#    def __str__(self):
-#        return "No intermediate cert retrieved!"
-#
-#
-#def make_context():
-#    context = SSL.Context(method=SSL.TLSv1_2_METHOD)
-#    return context
-#
-#
+def make_context():
+    context = SSL.Context(method=SSL.TLSv1_2_METHOD)
+    return context
+
+
 def get_x509_domains(cert):
     names = []
 
@@ -93,7 +74,7 @@ def get_x509_domains(cert):
 #
 def scan_host(hostname, port=443, timeout=5, context=None):
     if context is None:
-        context = SSL.Context(method=SSL.TLSv1_2_METHOD)
+        context = make_context()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock = SSL.Connection(context=context, socket=sock)
     sock.set_tlsext_host_name(hostname.encode('ascii'))
@@ -142,7 +123,7 @@ def parse_args():
                         help="socket timeout in seconds")
     parser.add_argument("-t", "--attempts",
                         type=utils.check_positive_int,
-                        default=1,
+                        default=3,
                         help="certificate fetch attempts per host")
     return parser.parse_args()
 
@@ -155,11 +136,13 @@ def setup_db(conn):
         "    entity_name TEXT,\n"
         "    issuer_fp TEXT,\n"
         "    observed_ts REAL,\n"
-        "    chain_fp TEXT, PRIMARY KEY (entity_name, issuer_fp))",
+        "    chain_fp TEXT,\n"
+        "    PRIMARY KEY (entity_name, issuer_fp))",
         "CREATE TABLE IF NOT EXISTS chain_element (\n"
-        "    chain_fp TEXT PRIMARY KEY,\n"
+        "    chain_fp TEXT,\n"
         "    chain_position INTEGER,\n"
-        "    cert_fp TEXT)",
+        "    cert_fp TEXT,\n"
+        "    PRIMARY KEY (chain_fp, chain_position))",
     ]
     cur = conn.cursor()
     for q in db_init:
@@ -167,29 +150,32 @@ def setup_db(conn):
     conn.commit()
 
 def process_domain(chain, ts, conn):
-    print(chain)
+    logger = logging.getLogger('PROCESSING')
+    logger.debug("%s %s", chain, ts)
 
 def main():
     args = parse_args()
+    logger = utils.setup_logger('MAIN', args.verbosity)
+    utils.setup_logger('PROCESSING', args.verbosity)
     pool = Pool(args.threads)
+    logger.info("Starting patrol with %d workers to retrieve certs and "
+                "db file %s", args.threads, repr(args.db))
     hostnames = (hostname for hostname in 
                  ( hostname.strip().rstrip('.') for hostname in sys.stdin ) if hostname)
     worker = partial(scan_worker, args.attempts, args.timeout)
+    logger.debug("Opening DB connection...")
     with sqlite3.connect(args.db) as conn:
         setup_db(conn)
+        logger.debug("DB connection setup finished.")
         for domain, result in pool.imap_unordered(worker, hostnames):
-            if result is not None:
+            logger.debug("Hostname %s returned result %s", repr(domain), repr(result))
+            if result is None:
+                logger.error("Failed to retrieve data from %s after %d attempts",
+                             domain, args.attempts)
+            else:
                 chain, ts = result
                 process_domain(chain, ts, conn)
-#    for hostname in hostnames:
-#        try:
-#            print(scan_host(hostname, context=context))
-#        except NoIntermediateCertReceived as exc:
-#            print("No intermediate cert received!")
-#            print("Offending certificate:")
-#            print(exc.peer_cert.decode('ascii'))
-#        except Exception as exc:
-#            print("Error: %s" % (str(exc),))
+    logger.info("Patrol finished.")
 
 
 if __name__ == '__main__':  # pragma: no cover
