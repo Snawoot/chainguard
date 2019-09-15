@@ -2,8 +2,10 @@
 
 import sys
 import socket
+import time
 import datetime
 import argparse
+import sqlite3
 from functools import partial
 
 from OpenSSL import SSL, crypto
@@ -12,6 +14,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography import x509
 from cryptography.x509.oid import ExtensionOID, NameOID
 from multiprocessing.dummy import Pool
+
+from . import utils
+from . import constants
 
 
 #class ChainguardException(Exception):
@@ -96,11 +101,12 @@ def scan_host(hostname, port=443, timeout=5, context=None):
     sock.connect((hostname, port))
     sock.setblocking(1)
     sock.do_handshake()
+    ts = time.time()
 
     certs = [cert.to_cryptography() for cert in sock.get_peer_cert_chain()]
     sock.close()
     del sock
-    return certs
+    return certs, ts
 
 
 def scan_worker(attempts, timeout, domain):
@@ -114,46 +120,54 @@ def scan_worker(attempts, timeout, domain):
 
 
 def parse_args():
-    def check_positive_int(val):
-        def fail():
-            raise argparse.ArgumentTypeError("%s is not valid positive integer" % (repr(val),))
-        try:
-            ival = int(val)
-        except ValueError:
-            fail()
-        if not 0 < ival:
-            fail()
-        return ival
-
-    def check_positive_float(val):
-        def fail():
-            raise argparse.ArgumentTypeError("%s is not valid positive float" % (repr(val),))
-        try:
-            ival = float(val)
-        except ValueError:
-            fail()
-        if not 0 < ival:
-            fail()
-        return ival
-
     parser = argparse.ArgumentParser(
         description='TLS certificate chain watchdog which monitors hosts '
                     'for malicious certificates issued by rogue CA. Accepts'
                     ' input domains via STDIN, one per line.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("db",
+                        help="path to cert tracking database")
+    parser.add_argument("-v", "--verbosity",
+                        help="logging verbosity",
+                        type=utils.check_loglevel,
+                        choices=constants.LogLevel,
+                        default=constants.LogLevel.info)
     parser.add_argument("-n", "--threads",
-                        type=check_positive_int,
+                        type=utils.check_positive_int,
                         default=8,
                         help="number of threads to retrieve certs")
     parser.add_argument("-T", "--timeout",
-                        type=check_positive_float,
+                        type=utils.check_positive_float,
                         default=5.,
                         help="socket timeout in seconds")
     parser.add_argument("-t", "--attempts",
-                        type=check_positive_int,
+                        type=utils.check_positive_int,
                         default=1,
                         help="certificate fetch attempts per host")
     return parser.parse_args()
+
+def setup_db(conn):
+    db_init = [
+        "PRAGMA journal_mode=WAL",
+        "PRAGMA synchronous=NORMAL",
+        "CREATE TABLE IF NOT EXISTS certificate (fp TEXT PRIMARY KEY, body BLOB)",
+        "CREATE TABLE IF NOT EXISTS certification (\n"
+        "    entity_name TEXT,\n"
+        "    issuer_fp TEXT,\n"
+        "    observed_ts REAL,\n"
+        "    chain_fp TEXT, PRIMARY KEY (entity_name, issuer_fp))",
+        "CREATE TABLE IF NOT EXISTS chain_element (\n"
+        "    chain_fp TEXT PRIMARY KEY,\n"
+        "    chain_position INTEGER,\n"
+        "    cert_fp TEXT)",
+    ]
+    cur = conn.cursor()
+    for q in db_init:
+        cur.execute(q)
+    conn.commit()
+
+def process_domain(chain, ts, conn):
+    print(chain)
 
 def main():
     args = parse_args()
@@ -161,8 +175,12 @@ def main():
     hostnames = (hostname for hostname in 
                  ( hostname.strip().rstrip('.') for hostname in sys.stdin ) if hostname)
     worker = partial(scan_worker, args.attempts, args.timeout)
-    for (domain, chain) in pool.imap_unordered(worker, hostnames):
-        print((domain, chain))
+    with sqlite3.connect(args.db) as conn:
+        setup_db(conn)
+        for domain, result in pool.imap_unordered(worker, hostnames):
+            if result is not None:
+                chain, ts = result
+                process_domain(chain, ts, conn)
 #    for hostname in hostnames:
 #        try:
 #            print(scan_host(hostname, context=context))
