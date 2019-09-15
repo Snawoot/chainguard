@@ -93,7 +93,7 @@ class ChainProcessor(object):
         names = utils.get_x509_domains(chain[0])
         do_commit = False
         for name in names:
-            issuer_fp = chain[1].fingerprint(SHA256()).hex() if len(chain) > 1 else None
+            issuer_fp = chain[1].fingerprint(SHA256()).hex() if len(chain) > 1 else ''
             try:
                 cur.execute("INSERT INTO certification (entity_name, issuer_fp, observed_ts, chain_fp)"
                             " VALUES (?, ?, ?, ?)", (name, issuer_fp, ts, chain_fp))

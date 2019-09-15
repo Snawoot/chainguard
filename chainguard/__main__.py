@@ -41,7 +41,7 @@ def parse_args():
                         help="number of threads to retrieve certs")
     parser.add_argument("-T", "--timeout",
                         type=utils.check_positive_float,
-                        default=5.,
+                        default=10.,
                         help="socket timeout in seconds")
     parser.add_argument("-t", "--attempts",
                         type=utils.check_positive_int,
