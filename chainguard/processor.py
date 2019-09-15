@@ -41,6 +41,8 @@ class ChainProcessor(object):
             "    chain_position INTEGER,\n"
             "    cert_fp TEXT,\n"
             "    PRIMARY KEY (chain_fp, chain_position))",
+            "CREATE INDEX IF NOT EXISTS idx_certification_observed_ts\n"
+            "ON certification (observed_ts)\n",
         ]
         cur = conn.cursor()
         for q in db_init:

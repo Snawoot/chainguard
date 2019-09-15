@@ -26,6 +26,7 @@ setup(name='chainguard',
       entry_points={
           'console_scripts': [
               'chainguard=chainguard.__main__:main',
+              'chainguard-getchain=chainguard.getchain:main',
           ],
       },
       classifiers=[
