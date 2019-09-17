@@ -11,7 +11,7 @@ import dateparser
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Revise news certifications since given date',
+        description='Revise new certifications since given date',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("db",
                         help="path to cert tracking database")
