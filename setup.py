@@ -29,6 +29,7 @@ setup(name='chainguard',
           'console_scripts': [
               'chainguard=chainguard.__main__:main',
               'chainguard-getchain=chainguard.getchain:main',
+              'chainguard-getname=chainguard.getname:main',
               'chainguard-news=chainguard.news:main',
           ],
       },
