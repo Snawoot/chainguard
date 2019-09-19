@@ -23,6 +23,7 @@ query = """
 SELECT
     group_concat(a.entity_name),
     a.issuer_fp,
+    b.domain,
     b.ts,
     b.chain_fp,
     b.endpoint
@@ -43,7 +44,7 @@ def main():
     with sqlite3.connect(args.db) as conn:
         cur = conn.cursor()
         for row in cur.execute(query, (since_ts,)):
-            entity_name, issuer_fp, ts, chain_fp, endpoint = row
+            entity_name, issuer_fp, domain, ts, chain_fp, endpoint = row
             observed_dt_str = datetime.utcfromtimestamp(ts)\
                 .replace(tzinfo=timezone.utc)\
                 .astimezone(tz.tzlocal())\
@@ -53,6 +54,7 @@ def main():
             print("Chain Fingerprint:", chain_fp)
             print("Observed at:", observed_dt_str)
             print("Endpoint:", endpoint)
+            print("Domain:", endpoint)
             print("-----------------------------")
 
 

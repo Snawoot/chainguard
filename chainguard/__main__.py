@@ -68,7 +68,7 @@ def main():
                              domain, args.attempts)
             else:
                 chain, ts, peer = result
-                processor.feed(chain, ts, peer)
+                processor.feed(domain, chain, ts, peer)
     logger.info("Patrol finished.")
 
 

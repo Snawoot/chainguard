@@ -38,6 +38,7 @@ class ChainProcessor(object):
             "    PRIMARY KEY (chain_fp, chain_position))",
             "CREATE TABLE IF NOT EXISTS session (\n"
             "    id TEXT PRIMARY KEY,\n"
+            "    domain TEXT,\n"
             "    ts REAL,\n"
             "    chain_fp TEXT,\n"
             "    endpoint TEXT\n"
@@ -68,7 +69,7 @@ class ChainProcessor(object):
     def __exit__(self, ext_type, exc_value, tb):
         return self.shutdown()
 
-    def feed(self, chain, ts, peer):
+    def feed(self, domain, chain, ts, peer):
         peer_str = peer[0] + '#' + str(peer[-1])
         session_id = uuid.uuid4().hex
         self._logger.debug("%s %s", chain, ts)
@@ -102,8 +103,8 @@ class ChainProcessor(object):
             except sqlite3.IntegrityError:
                 pass
 
-        cur.execute("INSERT INTO session (id, ts, chain_fp, endpoint) VALUES (?, ?, ?, ?)",
-                    (session_id, ts, chain_fp, peer_str))
+        cur.execute("INSERT INTO session (id, domain, ts, chain_fp, endpoint) VALUES (?, ?, ?, ?, ?)",
+                    (session_id, domain, ts, chain_fp, peer_str))
         names = utils.get_x509_domains(chain[0])
         do_commit = False
         for name in names:
