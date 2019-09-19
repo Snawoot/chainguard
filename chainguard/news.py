@@ -54,7 +54,7 @@ def main():
             print("Chain Fingerprint:", chain_fp)
             print("Observed at:", observed_dt_str)
             print("Endpoint:", endpoint)
-            print("Domain:", endpoint)
+            print("Domain:", domain)
             print("-----------------------------")
 
 
