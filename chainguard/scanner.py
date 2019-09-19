@@ -19,10 +19,13 @@ def scan_host(hostname, port=443, timeout=5, context=None):
     sock.setblocking(1)
     sock.do_handshake()
     ts = time.time()
+    peer = None
+    try:
+        peer = sock.getpeername()
+    except:
+        pass
 
     certs = [cert.to_cryptography() for cert in sock.get_peer_cert_chain()]
     sock.close()
     del sock
-    return certs, ts
-
-
+    return certs, ts, peer

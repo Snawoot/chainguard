@@ -1,3 +1,4 @@
+import uuid
 import sqlite3
 import logging
 
@@ -30,19 +31,24 @@ class ChainProcessor(object):
             "PRAGMA journal_mode=WAL",
             "PRAGMA synchronous=NORMAL",
             "CREATE TABLE IF NOT EXISTS certificate (fp TEXT PRIMARY KEY, body BLOB)",
-            "CREATE TABLE IF NOT EXISTS certification (\n"
-            "    entity_name TEXT,\n"
-            "    issuer_fp TEXT,\n"
-            "    observed_ts REAL,\n"
-            "    chain_fp TEXT,\n"
-            "    PRIMARY KEY (entity_name, issuer_fp))",
             "CREATE TABLE IF NOT EXISTS chain_element (\n"
             "    chain_fp TEXT,\n"
             "    chain_position INTEGER,\n"
             "    cert_fp TEXT,\n"
             "    PRIMARY KEY (chain_fp, chain_position))",
-            "CREATE INDEX IF NOT EXISTS idx_certification_observed_ts\n"
-            "ON certification (observed_ts)\n",
+            "CREATE TABLE IF NOT EXISTS session (\n"
+            "    id TEXT PRIMARY KEY,\n"
+            "    ts REAL,\n"
+            "    chain_fp TEXT,\n"
+            "    endpoint TEXT\n"
+            ")",
+            "CREATE INDEX IF NOT EXISTS idx_session_ts\n"
+            "ON session (ts)\n",
+            "CREATE TABLE IF NOT EXISTS certification (\n"
+            "    entity_name TEXT,\n"
+            "    issuer_fp TEXT,\n"
+            "    discovered_session TEXT,\n"
+            "    PRIMARY KEY (entity_name, issuer_fp))",
         ]
         cur = conn.cursor()
         for q in db_init:
@@ -62,7 +68,9 @@ class ChainProcessor(object):
     def __exit__(self, ext_type, exc_value, tb):
         return self.shutdown()
 
-    def feed(self, chain, ts):
+    def feed(self, chain, ts, peer):
+        peer_str = peer[0] + '#' + str(peer[-1])
+        session_id = uuid.uuid4().hex
         self._logger.debug("%s %s", chain, ts)
         if not chain:
             self._logger.error("Got empty cert chain!")
@@ -94,13 +102,15 @@ class ChainProcessor(object):
             except sqlite3.IntegrityError:
                 pass
 
+        cur.execute("INSERT INTO session (id, ts, chain_fp, endpoint) VALUES (?, ?, ?, ?)",
+                    (session_id, ts, chain_fp, peer_str))
         names = utils.get_x509_domains(chain[0])
         do_commit = False
         for name in names:
             issuer_fp = chain[1].fingerprint(SHA256()).hex() if len(chain) > 1 else ''
             try:
-                cur.execute("INSERT INTO certification (entity_name, issuer_fp, observed_ts, chain_fp)"
-                            " VALUES (?, ?, ?, ?)", (name, issuer_fp, ts, chain_fp))
+                cur.execute("INSERT INTO certification (entity_name, issuer_fp, discovered_session)"
+                            " VALUES (?, ?, ?)", (name, issuer_fp, session_id))
                 do_commit = True
             except sqlite3.IntegrityError:
                 pass

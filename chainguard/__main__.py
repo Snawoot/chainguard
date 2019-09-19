@@ -67,8 +67,8 @@ def main():
                 logger.error("Failed to retrieve data from %s after %d attempts",
                              domain, args.attempts)
             else:
-                chain, ts = result
-                processor.feed(chain, ts)
+                chain, ts, peer = result
+                processor.feed(chain, ts, peer)
     logger.info("Patrol finished.")
 
 

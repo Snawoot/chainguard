@@ -26,21 +26,23 @@ def main():
     args = parse_args()
     query = """
     SELECT
-        entity_name,
-        issuer_fp,
-        observed_ts,
-        chain_fp
+        a.entity_name,
+        a.issuer_fp,
+        b.ts,
+        b.chain_fp,
+        b.endpoint
     FROM
-        certification
+        certification a
+    LEFT JOIN session b ON a.discovered_session = b.id
     WHERE
-        entity_name """ + ("LIKE" if args.like else "=") + """ ?
-    ORDER BY observed_ts ASC
+        a.entity_name """ + ("LIKE" if args.like else "=") + """ ?
+    ORDER BY b.ts ASC
     """
     with sqlite3.connect(args.db) as conn:
         cur = conn.cursor()
         for row in cur.execute(query, (args.entity_name,)):
-            entity_name, issuer_fp, observed_ts, chain_fp = row
-            observed_dt_str = datetime.utcfromtimestamp(observed_ts)\
+            entity_name, issuer_fp, ts, chain_fp, endpoint = row
+            observed_dt_str = datetime.utcfromtimestamp(ts)\
                 .replace(tzinfo=timezone.utc)\
                 .astimezone(tz.tzlocal())\
                 .isoformat()
@@ -48,6 +50,7 @@ def main():
             print("Issuer Fingerprint (SHA256):", issuer_fp)
             print("Chain Fingerprint:", chain_fp)
             print("Observed at:", observed_dt_str)
+            print("Endpoint:", endpoint)
             print("-----------------------------")
 
 
