@@ -7,7 +7,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()  # pylint: disable=invalid-name
 
 setup(name='chainguard',
-      version='0.3.1',
+      version='0.4.0',
       description='TLS certificate chain watchdog which monitors hosts '
       'for malicious certificates issued by rogue CA',
       url='https://github.com/Snawoot/chainguard',
