@@ -13,11 +13,12 @@ from .processor import ChainProcessor
 
 
 def scan_worker(attempts, timeout, domain):
+    logger = logging.getLogger("WORKER")
     for _ in range(attempts):
         try:
             return domain, scan_host(domain, timeout=timeout)
         except Exception as exc:
-            pass
+            logger.error("Got exception from scan_host: %s", str(exc))
     else:
         return (domain, None)
 
@@ -52,6 +53,7 @@ def parse_args():
 def main():
     args = parse_args()
     logger = utils.setup_logger('MAIN', args.verbosity)
+    logger = utils.setup_logger('WORKER', args.verbosity)
     utils.setup_logger(ChainProcessor.__name__, args.verbosity)
 
     logger.info("Starting patrol with %d workers to retrieve certs and "
