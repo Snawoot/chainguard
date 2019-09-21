@@ -18,7 +18,8 @@ def scan_worker(attempts, timeout, domain):
         try:
             return domain, scan_host(domain, timeout=timeout)
         except Exception as exc:
-            logger.error("Got exception from scan_host: %s", str(exc))
+            logger.error("Got exception from scan_host: type: %s, message: %s",
+                        str(type(exc)), str(exc))
     else:
         return (domain, None)
 
